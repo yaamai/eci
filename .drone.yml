@@ -15,4 +15,4 @@ steps:
       from_secret: "github_api_key"
     files: "eci"
   when:
-    event": ["tag"]
+    event: ["tag"]
