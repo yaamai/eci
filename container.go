@@ -70,6 +70,7 @@ type Container struct {
 	Opt   *Option
 
 	Envs    []string
+    ImageEnvs []string
 	Vols    []string
 	Image   string
 	Args    []string
@@ -141,7 +142,7 @@ func (c *Container) mountRoot() (string, error) {
 	}
 
 	// append image env to container
-	c.Envs = append(c.Envs, envs...)
+	c.ImageEnvs = envs
 
 	newroot, err := (*c.store).Mount(imageTopLayer, "")
 	if err != nil {
@@ -293,8 +294,10 @@ func runWithTty(cmd *exec.Cmd) (func(), func(), error) {
 }
 
 func (c *Container) run() error {
-	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(c.Envs)), c.Args[1:]...)
-	cmd.Env = c.Envs
+    // concat image defiend env and user supplied env
+    envs := append(c.ImageEnvs, c.Envs...)
+	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(envs)), c.Args[1:]...)
+	cmd.Env = envs
 
 	if c.Tty {
 		closePty, restoreTermios, err := runWithTty(cmd)
