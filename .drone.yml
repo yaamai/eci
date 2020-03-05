@@ -4,7 +4,15 @@ type: kubernetes
 name: default
 
 steps:
-- name: greeting
+- name: build
   image: golang:1.14.0-alpine
   commands:
   - env BUILDTAGS="exclude_graphdriver_btrfs exclude_graphdriver_devicemapper" CGO_ENABLED=0 go build
+- name: "publish release",
+  image: "plugins/github-release",
+  settings:
+    api_key:
+      from_secret: "github_api_key"
+    files: "eci"
+  when:
+    event": ["tag"]

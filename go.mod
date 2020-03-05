@@ -1,4 +1,4 @@
-module repo.naru.pw/aina/test-container-storage
+module repo.naru.pw/aina/eci
 
 go 1.13
 
