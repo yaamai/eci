@@ -101,7 +101,7 @@ func main() {
 	}
 
 	// parse flags (only subcommand)
-	subcmd, opt, c, err := parseFlags(true)
+	subcmd, opt, c, err := parseFlags(false)
 	initLog(opt)
 	log.Info(c, subcmd, err)
 
@@ -114,7 +114,14 @@ func main() {
 		log.Fatalf("Error starting the reexec.Command - %s\n", err)
 	}
 
-	if err := cmd.Wait(); err != nil {
-		log.Fatalf("Error waiting for the reexec.Command - %s\n", err)
+	if c.(*Container).Detach {
+		cmd.SysProcAttr.Noctty = true
+		if err := cmd.Process.Release(); err != nil {
+			log.Fatalf("Error detaching process %s\n", err)
+		}
+	} else {
+		if err := cmd.Wait(); err != nil {
+			log.Fatalf("Error waiting for the reexec.Command - %s\n", err)
+		}
 	}
 }
