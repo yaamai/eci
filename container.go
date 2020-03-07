@@ -125,7 +125,6 @@ func (c *Container) initStore() error {
 	storeOpt.RunRoot = c.Opt.RunRoot
 	storeOpt.GraphRoot = c.Opt.GraphRoot
 	storeOpt.GraphDriverOptions = strings.Split(c.Opt.StorageOpt, ",")
-	// storeOpt.UIDMap = []idtools.IDMap{idtools.IDMap{0, 1000, 1}}
 
 	store, err := storage.GetStore(storeOpt)
 	if err != nil {
@@ -300,25 +299,6 @@ func (c *Container) run() error {
 	envs := append(c.ImageEnvs, c.Envs...)
 	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(envs)), c.Args[1:]...)
 	cmd.Env = envs
-	//	cmd.SysProcAttr = &syscall.SysProcAttr{
-	//		Cloneflags: syscall.CLONE_NEWNS |
-	//			syscall.CLONE_NEWUTS |
-	//			syscall.CLONE_NEWIPC |
-	//			syscall.CLONE_NEWPID |
-	//			syscall.CLONE_NEWUSER,
-	//		UidMappings: []syscall.SysProcIDMap{
-	//			{
-	//				ContainerID: 0,
-	//				HostID:      200000,
-	//				Size:        1000,
-	//			},
-	//			{
-	//				ContainerID: 1000,
-	//				HostID:      1000,
-	//				Size:        1,
-	//			},
-	//		},
-	//	}
 
 	if c.Tty {
 		closePty, restoreTermios, err := runWithTty(cmd)
