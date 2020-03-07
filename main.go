@@ -18,6 +18,8 @@ func prepareReExec(procName string, opt *Option) *exec.Cmd {
 	cmd.Stderr = os.Stderr
 	cmd.Env = getOptionEnv(opt)
 
+	// uid,gid mapping must be 1. (with non-root user)
+	// using new(u|g)idmap can. but go os/exec not suported
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNS |
 			syscall.CLONE_NEWUTS |
@@ -38,6 +40,7 @@ func prepareReExec(procName string, opt *Option) *exec.Cmd {
 				Size:        1,
 			},
 		},
+		AmbientCaps: []uintptr{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37},
 	}
 
 	return cmd
@@ -69,7 +72,7 @@ func run() {
 }
 
 func init() {
-	log.SetLevel(log.ErrorLevel)
+	log.SetLevel(log.DebugLevel)
 	reexec.Register("run", run)
 	if reexec.Init() {
 		os.Exit(0)
@@ -77,7 +80,10 @@ func init() {
 }
 
 func initLog(opt *Option) {
-	log.SetLevel(log.ErrorLevel)
+	// log.SetLevel(log.ErrorLevel)
+	log.SetLevel(log.DebugLevel)
+	log.SetReportCaller(true)
+	log.SetFormatter(&log.JSONFormatter{})
 
 	file, err := os.OpenFile(opt.Log, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err == nil {
