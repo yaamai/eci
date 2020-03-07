@@ -77,6 +77,7 @@ type Container struct {
 	Args      []string
 	WorkDir   string
 	Tty       bool
+	Detach    bool
 }
 
 func mountProc(newroot string) error {
@@ -307,12 +308,21 @@ func (c *Container) run() error {
 	cmd.Env = envs
 
 	if c.Tty {
-		closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true)
-		if err != nil {
-			return err
+		if c.Detach {
+			r, w := io.Pipe()
+			closePty, _, err := runWithTty(cmd, r, w, false)
+			if err != nil {
+				return err
+			}
+			defer closePty()
+		} else {
+			closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true)
+			if err != nil {
+				return err
+			}
+			defer closePty()
+			defer restoreTermios()
 		}
-		defer closePty()
-		defer restoreTermios()
 	} else {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout

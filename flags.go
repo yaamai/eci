@@ -27,16 +27,16 @@ func (i *StringList) Set(value string) error {
 }
 
 func parseRunFlags(args []string) (*Container, error) {
-	var runEnvFlags StringList
-	var runVolFlags StringList
+	var runEnvFlags, runVolFlags StringList
 	var workingDir string
-	var tty bool
+	var tty, detach bool
 
 	runFlags := flag.NewFlagSet("run", flag.ContinueOnError)
 	runFlags.Var(&runEnvFlags, "e", "environment vars")
 	runFlags.Var(&runVolFlags, "v", "volume bind")
 	runFlags.StringVar(&workingDir, "w", "/", "working directory")
 	runFlags.BoolVar(&tty, "t", false, "allocate tty")
+	runFlags.BoolVar(&detach, "d", false, "detach")
 	runFlags.Parse(args)
 
 	c := Container{}
@@ -44,6 +44,7 @@ func parseRunFlags(args []string) (*Container, error) {
 	c.Vols = runVolFlags
 	c.WorkDir = workingDir
 	c.Tty = tty
+	c.Detach = detach
 
 	if runFlags.NArg() < 1 {
 		return nil, errors.New("image name not passed")
