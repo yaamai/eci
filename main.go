@@ -64,10 +64,12 @@ func run() {
 		log.Fatal(err)
 	}
 
-	err = container.run()
+	rc, err := container.run()
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debug("Exit with %d", rc)
+	os.Exit(rc)
 }
 
 func init() {

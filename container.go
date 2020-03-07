@@ -277,7 +277,7 @@ func initStdin(ptmx *os.File) func() {
 	return func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }
 }
 
-func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool) (func(), func(), error) {
+func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool, detach bool) (func(), func(), error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return nil, nil, err
@@ -290,35 +290,42 @@ func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool) (func(), 
 	}
 
 	go func() {
-		writeLen, err := io.Copy(ptmx, r)
-		log.Println(writeLen, err)
+		_, err := io.Copy(ptmx, r)
+		log.Warnf("waiting for the tty - %s\n", err)
 	}()
 
 	// wait command output end
-	writeLen, err := io.Copy(w, ptmx)
-	log.Debug(writeLen, err)
+	readFunc := func() {
+		_, err = io.Copy(w, ptmx)
+		log.Warnf("waiting for the tty - %s\n", err)
+	}
+
+	readFunc()
 
 	return closePty, restoreTermios, nil
 }
 
-func (c *Container) run() error {
+func (c *Container) run() (int, error) {
 	// concat image defiend env and user supplied env
 	envs := append(c.ImageEnvs, c.Envs...)
 	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(envs)), c.Args[1:]...)
 	cmd.Env = envs
 
+	rc := -1
 	if c.Tty {
 		if c.Detach {
 			r, w := io.Pipe()
-			closePty, _, err := runWithTty(cmd, r, w, false)
+			closePty, _, err := runWithTty(cmd, r, w, false, true)
 			if err != nil {
-				return err
+				log.Warn("tty err", err)
+				return -1, err
 			}
 			defer closePty()
 		} else {
-			closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true)
+			closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true, false)
 			if err != nil {
-				return err
+				log.Warn("tty err", err)
+				return -1, err
 			}
 			defer closePty()
 			defer restoreTermios()
@@ -329,13 +336,14 @@ func (c *Container) run() error {
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return err
-		}
-
-		if err := cmd.Wait(); err != nil {
-			log.Warnf("Error waiting for the reexec.Command - %s\n", err)
+			return -1, err
 		}
 	}
+	if err := cmd.Wait(); err != nil {
+		log.Warnf("Error waiting for the reexec.Command - %s\n", err)
+	}
+	rc = cmd.ProcessState.ExitCode()
+	log.Debug("Cmd exit code =", rc)
 
-	return nil
+	return rc, nil
 }
