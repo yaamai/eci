@@ -257,13 +257,7 @@ func (c *Container) prepare() error {
 	return nil
 }
 
-func runWithTty(cmd *exec.Cmd) (func(), func(), error) {
-	ptmx, err := pty.Start(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
-	closePty := func() { _ = ptmx.Close() }
-
+func initStdin(ptmx *os.File) func() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
 	go func() {
@@ -274,21 +268,33 @@ func runWithTty(cmd *exec.Cmd) (func(), func(), error) {
 		}
 	}()
 	ch <- syscall.SIGWINCH // Initial resize.
-
 	// Set stdin in raw mode.
 	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
+		return nil
+	}
+	return func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }
+}
+
+func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool) (func(), func(), error) {
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
 		return nil, nil, err
 	}
-	restoreTermios := func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }
+	closePty := func() { _ = ptmx.Close() }
+
+	restoreTermios := func() {}
+	if initTty {
+		restoreTermios = initStdin(ptmx)
+	}
 
 	go func() {
-		writeLen, err := io.Copy(ptmx, os.Stdin)
+		writeLen, err := io.Copy(ptmx, r)
 		log.Println(writeLen, err)
 	}()
 
 	// wait command output end
-	writeLen, err := io.Copy(os.Stdout, ptmx)
+	writeLen, err := io.Copy(w, ptmx)
 	log.Debug(writeLen, err)
 
 	return closePty, restoreTermios, nil
@@ -301,7 +307,7 @@ func (c *Container) run() error {
 	cmd.Env = envs
 
 	if c.Tty {
-		closePty, restoreTermios, err := runWithTty(cmd)
+		closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true)
 		if err != nil {
 			return err
 		}
