@@ -101,6 +101,7 @@ func mountProc(newroot string) error {
 		{false, "/dev/full", filepath.Join(newroot, "/dev/full"), "devtmpfs", syscall.MS_BIND, ""},
 		{false, "/dev/zero", filepath.Join(newroot, "/dev/zero"), "devtmpfs", syscall.MS_BIND, ""},
 		{false, "/dev/fuse", filepath.Join(newroot, "/dev/fuse"), "dev", syscall.MS_BIND, ""},
+		{false, "/etc/resolv.conf", filepath.Join(newroot, "/etc/resolv.conf"), "none", syscall.MS_BIND, ""},
 	}
 
 	for _, m := range mounts {
@@ -308,8 +309,11 @@ func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool, detach bo
 func (c *Container) run() (int, error) {
 	// concat image defiend env and user supplied env
 	envs := append(c.ImageEnvs, c.Envs...)
-	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(envs)), c.Args[1:]...)
+	cmd := exec.Command(getAbsolutePath(c.Args[0], getPathEnv(envs)))
+	cmd.Args = c.Args
+	// cmd := exec.Command(c.Args[0], c.Args[1:]...)
 	cmd.Env = envs
+	log.Debug("Executing command:", cmd, c.Args)
 
 	rc := -1
 	if c.Tty {
