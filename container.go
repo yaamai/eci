@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
+	"github.com/pkg/errors"
 	"github.com/containers/common/pkg/unshare"
 	"github.com/containers/storage"
 	"os"
@@ -33,13 +33,13 @@ func getImageEnvs(store *storage.Store, imageId string, bigDataNames []string) (
 	// but, generally first bigdata contains iamge info.
 	bigdataBytes, err := (*store).ImageBigData(imageId, bigDataNames[0])
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Failed to get image bigdata")
 	}
 
 	bigdata := ImageBigData{}
 	err = json.Unmarshal(bigdataBytes, &bigdata)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Failed to unmarshal image bigdata")
 	}
 
 	return bigdata.Config.Env, nil
@@ -49,14 +49,14 @@ func getImageEnvs(store *storage.Store, imageId string, bigDataNames []string) (
 func getImageInfoByName(name string, store *storage.Store) (string, []string, error) {
 	images, err := (*store).Images()
 	if err != nil {
-		return "", nil, err
+		return "", nil, errors.Wrap(err, "failed to get store images list")
 	}
 
 	for _, image := range images {
 		if ContainString(image.Names, name) {
 			env, err := getImageEnvs(store, image.ID, image.BigDataNames)
 			if err != nil {
-				return "", nil, err
+				return "", nil, errors.Wrap(err, "faield to get image env")
 			}
 
 			return image.TopLayer, env, nil
@@ -112,7 +112,7 @@ func mountProc(newroot string) error {
 		}
 		log.Println(m)
 		if err := syscall.Mount(m.source, m.target, m.fstype, uintptr(m.flags), m.data); err != nil {
-			return err
+			return errors.Wrap(err, "failed to mount " + m.target)
 		}
 	}
 
@@ -122,7 +122,7 @@ func mountProc(newroot string) error {
 func (c *Container) initStore() error {
 	storeOpt, err := storage.DefaultStoreOptions(unshare.IsRootless(), unshare.GetRootlessUID())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get store options")
 	}
 	storeOpt.RunRoot = c.Opt.RunRoot
 	storeOpt.GraphRoot = c.Opt.GraphRoot
@@ -130,7 +130,7 @@ func (c *Container) initStore() error {
 
 	store, err := storage.GetStore(storeOpt)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get store")
 	}
 
 	c.store = &store
@@ -141,7 +141,7 @@ func (c *Container) mountRoot() (string, error) {
 
 	imageTopLayer, envs, err := getImageInfoByName(c.Image, c.store)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to get image info")
 	}
 
 	// append image env to container
@@ -149,11 +149,11 @@ func (c *Container) mountRoot() (string, error) {
 
 	newroot, err := (*c.store).Mount(imageTopLayer, "")
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to mount image")
 	}
 
 	if err := syscall.Mount(newroot, newroot, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to re-mount image")
 	}
 
 	return newroot, nil
@@ -166,11 +166,11 @@ func (c *Container) mountVolumes() error {
 		dest := volMapArray[0]
 
 		if err := os.MkdirAll(dest, 0700); err != nil {
-			return err
+			return errors.Wrap(err, "failed to create mount dest")
 		}
 
 		if err := syscall.Mount(src, dest, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-			return err
+			return errors.Wrap(err, "failed to bind-mount volumes")
 		}
 	}
 
@@ -179,12 +179,12 @@ func (c *Container) mountVolumes() error {
 
 func (c *Container) cleanupPivot() error {
 	if err := os.Chdir(c.WorkDir); err != nil {
-		return err
+		return errors.Wrap(err, "failed chdir working directory")
 	}
 
 	old := "/.pivot_root"
 	if err := syscall.Unmount(old, syscall.MNT_DETACH); err != nil {
-		return err
+		return errors.Wrap(err, "failed to unmount original root")
 	}
 
 	return nil
@@ -203,7 +203,7 @@ func (c *Container) makeDeviceLinks() error {
 	for _, link := range links {
 		err := os.Symlink(link[0], link[1])
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to create device links " + link[1])
 		}
 	}
 
@@ -213,11 +213,11 @@ func (c *Container) makeDeviceLinks() error {
 func (c *Container) pivot(path string) error {
 	old := filepath.Join(path, "/.pivot_root")
 	if err := os.MkdirAll(old, 0700); err != nil {
-		return err
+		return errors.Wrap(err, "failed to create temporary original root dir")
 	}
 
 	if err := syscall.PivotRoot(path, old); err != nil {
-		return err
+		return errors.Wrap(err, "failed to pivot root")
 	}
 
 	return nil
@@ -225,36 +225,36 @@ func (c *Container) pivot(path string) error {
 
 func (c *Container) prepare() error {
 	if err := c.initStore(); err != nil {
-		return err
+		return errors.Wrap(err, "failed to init store")
 	}
 
 	rootPath, err := c.mountRoot()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to mount image root")
 	}
 
 	err = mountProc(rootPath)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to mount procs")
 	}
 
 	if err = c.pivot(rootPath); err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "failed to pivot")
 	}
 
 	err = c.mountVolumes()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to mount volumes")
 	}
 
 	err = c.cleanupPivot()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to cleanup pivot")
 	}
 
 	err = c.makeDeviceLinks()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create device links")
 	}
 	return nil
 }
@@ -281,7 +281,7 @@ func initStdin(ptmx *os.File) func() {
 func runWithTty(cmd *exec.Cmd, r io.Reader, w io.Writer, initTty bool, detach bool) (func(), func(), error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to start process with tty")
 	}
 	closePty := func() { _ = ptmx.Close() }
 
@@ -322,14 +322,14 @@ func (c *Container) run() (int, error) {
 			closePty, _, err := runWithTty(cmd, r, w, false, true)
 			if err != nil {
 				log.Warn("tty err", err)
-				return -1, err
+				return -1, errors.Wrap(err, "failed to run with tty")
 			}
 			defer closePty()
 		} else {
 			closePty, restoreTermios, err := runWithTty(cmd, os.Stdin, os.Stdout, true, false)
 			if err != nil {
 				log.Warn("tty err", err)
-				return -1, err
+				return -1, errors.Wrap(err, "failed to run with tty not detached")
 			}
 			defer closePty()
 			defer restoreTermios()
@@ -340,7 +340,7 @@ func (c *Container) run() (int, error) {
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return -1, err
+			return -1, errors.Wrap(err, "failed to run without tty")
 		}
 	}
 	if err := cmd.Wait(); err != nil {

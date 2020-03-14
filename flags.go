@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 	"flag"
 	"fmt"
 	"os"
@@ -121,7 +121,7 @@ func parseFlags(onlySubcmd bool) (string, *Option, interface{}, error) {
 
 	if args[0] == "run" {
 		c, err := parseRunFlags(args[1:])
-		return args[0], &opt, c, err
+		return args[0], &opt, c, errors.Wrap(err, "failed to parse run flags")
 	}
 
 	return "", nil, nil, errors.New("subcommand not found")
