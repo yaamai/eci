@@ -110,9 +110,8 @@ func mountProc(newroot string) error {
 		} else {
 			os.Create(m.target)
 		}
-		log.Println(m)
 		if err := syscall.Mount(m.source, m.target, m.fstype, uintptr(m.flags), m.data); err != nil {
-			return errors.Wrap(err, "failed to mount " + m.target)
+			log.Warn(errors.Wrap(err, "failed to mount " + m.target))
 		}
 	}
 

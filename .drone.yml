@@ -8,6 +8,11 @@ steps:
   image: golang:1.14.0-alpine
   commands:
   - env BUILDTAGS="exclude_graphdriver_btrfs exclude_graphdriver_devicemapper" CGO_ENABLED=0 go build
+- name: upx
+  image: yaamai/upx:latest
+  commands:
+  - upx -v --best eci
+  - upx -v -t eci
 - name: "publish release"
   image: "plugins/github-release"
   settings:
